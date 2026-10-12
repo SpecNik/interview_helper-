@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {POST} from '../answer.mjs';
+const original=globalThis.fetch;
+const make=(b,origin='http://127.0.0.1:8766')=>new Request('http://127.0.0.1:8766/api/answer',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(b)});
+assert.equal((await POST(make({key:'test-key-only',question:'q'},'https://other.example'))).status,403);
+assert.equal((await POST(make({question:'q'}))).status,400);
+assert.equal((await POST(make({key:'test-key-only',question:' '}))).status,400);
+assert.equal((await POST(make({key:'test-key-only',question:'q',resume:'x'.repeat(30001)}))).status,400);
+let called=false;
+globalThis.fetch=async(url,options)=>{called=true;assert.equal(url,'https://api.deepseek.com/chat/completions');const body=JSON.parse(options.body);assert.equal(body.stream,true);assert.equal(body.thinking.type,'disabled');assert.equal(body.model,'deepseek-flash');assert.match(body.messages[0].content,/Never invent experience/);return new Response('data: {"choices":[{"delta":{"content":"Проверка"}}]}\n\ndata: [DONE]\n\n',{headers:{'Content-Type':'text/event-stream'}})};
+const streamed=await POST(make({key:'test-key-only',question:'Question',resume:'Example experience'}));assert.equal(streamed.status,200);assert.match(await streamed.text(),/Проверка/);assert.equal(called,true);
+globalThis.fetch=async()=>new Response('',{status:402});const failed=await POST(make({key:'test-key-only',question:'q'}));assert.equal(failed.status,402);assert.match((await failed.json()).error,/балансе/);
+globalThis.fetch=original;console.log('API checks passed: validation, origin, provider payload, stream, balance error.');
